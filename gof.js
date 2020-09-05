@@ -748,6 +748,13 @@ GOF.initialPatterns = {
         "sizeRows": 13,
         "gridSizeHint": 13*3
     },
+
+    "Line of 10 (oscillator)" : {
+        "pfunc" : GOF.cellArrayPredicate([1,1,1,1,1,1,1,1,1,1], 10, 1, "center", 0, 0),
+        "sizeCols" : 10,
+        "sizeRows" : 1,
+        "gridSizeHint" : 20
+    },
         
     "Random" : {
         "pfunc" : function(i, j, cols, rows, vCols, vRows) {
