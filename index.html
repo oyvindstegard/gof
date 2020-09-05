@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Game of Life</title>
+        <meta name="description" content="Game of Life">
+        <meta name="author" content="Øyvind Stegard">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style type="text/css">
+         body {
+             font-family: sans-serif;
+         }
+         #gameCanvas {
+             border: solid 1px;
+         }
+         #gameCanvasContainer {
+             float: left;
+             margin-right: .5em;
+             margin-bottom: .5em;
+         }
+         #controlsContainer {
+             float: left;
+         }
+         #helpContainer {
+             clear: both;
+         }
+         .key {
+             font-family: courier;
+             background: black;
+             color: white;
+             padding: .2em;
+             margin-right: .2em;
+             font-weight: bold;
+             border: 2px outset;
+         }
+         .activeKey {
+             background: #af111c;
+         }
+         .clickable {
+             cursor: pointer;
+         }
+         table#controls td {
+             padding: .2em;
+             white-space: nowrap;
+             line-height: 2em;
+         }
+        </style>
+        <script src="jquery-3.5.1.min.js"></script>
+        <script src="gof.js"></script>
+        <script>
+         // Setup game controls
+         var game;
+         var timer;
+         var canvas;
+
+         function initGameCanvas() {
+             canvas = document.getElementById("gameCanvas");
+             if (window.innerWidth && window.innerWidth < 480) {
+                 canvas.width = 400;
+                 canvas.height = 400;
+             }
+             return new GOF.Game(canvas, {"cellSize": 60, "padding": 4});
+         }
+
+         function zoomAnimation(targetCellSize, finishedCallback) {
+             if (game.cellSize == targetCellSize) {
+                 if (typeof finishedCallback == "function") {
+                     finishedCallback();
+                 }
+                 
+                 $("#cellSize").val(game.cellSize);
+                 return;
+             }
+             if (targetCellSize < game.cellSize) {
+                 adjustCellSize(game.cellSize-1);
+             } else {
+                 adjustCellSize(game.cellSize+1);
+             }
+             setTimeout(function() { zoomAnimation(targetCellSize, finishedCallback); }, 20);
+         }
+
+         function iterate() {
+             if (! game.nextIteration()) {
+                 // Stop auto-iteration if no cell changes occurred
+                 autoIteration(0);
+             }
+         }                           
+
+         function autoIteration(speed) {
+             if (typeof speed == "string") speed = parseInt(speed, 10);
+             speed = Math.max(0,Math.min(10,speed));
+             if (timer) {
+                 clearInterval(timer);
+                 timer = null;
+             }
+             if (speed > 0) {
+                 var maxInterval = 400;
+                 $("#startStop").text("Stop");
+                 timer = setInterval(iterate, maxInterval - (maxInterval/Math.log(10))*Math.log(speed));
+             } else {
+                 $("#startStop").text("Start");
+             }
+         }
+
+         function isAutoIterationEnabled() {
+             return timer ? true : false;
+         }
+
+         function toggleAutoIteration() {
+             if (isAutoIterationEnabled()) {
+                 autoIteration(0);
+             } else {
+                 autoIteration($("#speed").val());
+             }
+         }
+
+         function adjustCellSize(size) {
+             if (typeof size == "string") size = parseInt(size, 10);
+             size = Math.max(2,Math.min(size, 100));
+             game.setCellSize(size, getPadding(size));
+         }
+
+         function getPadding(cellSize) {
+             if (cellSize <= 4) {
+                 return 0;
+             } else if (cellSize <= 10) {
+                 return 2;
+             } else if (cellSize > 20) {
+                 return 4;
+             } else {
+                 return 3;
+             }
+         }
+
+         function bindRangeInputEvent(selector, handler) {
+             // "input" events on range sliders does not work on MSIE10/11/...
+             if (/Trident/.test(navigator.userAgent) || /MSIE/.test(navigator.userAgent)) {
+                 $(selector).on("change", handler);
+             } else {
+                 $(selector).on("input", handler);
+             }
+         }
+
+         function key_i() {
+             game.nextIteration();
+             autoIteration(0);
+         }
+         function key_r() {
+             game.reset();
+             autoIteration(0);
+         }
+         function key_c() {
+             game.clear();
+             autoIteration(0);
+         }
+         function key_z() {
+             adjustCellSize(game.cellSize-1);
+             $("#cellSize").val(game.cellSize);
+         }
+         function key_x() {
+             adjustCellSize(game.cellSize+1);
+             $("#cellSize").val(game.cellSize);
+         }
+         function key_d() {
+             var newVal = parseInt($("#speed").val(), 10) + 1;
+             newVal = Math.max(1, Math.min(newVal, 10));
+             $("#speed").val(newVal);
+             if (isAutoIterationEnabled()) {
+                 autoIteration(newVal);
+             }
+         }
+         function key_a() {
+             var newVal = parseInt($("#speed").val(), 10) - 1;
+             newVal = Math.max(1, Math.min(newVal, 10));
+             $("#speed").val(newVal);
+             if (isAutoIterationEnabled()) {
+                 autoIteration(newVal);
+             }
+         }
+
+         function initControls() {
+             // Cell size [grid size] adjustment
+             $("#cellSize").val(game.cellSize);
+             bindRangeInputEvent("#cellSize", function(e) {
+                 adjustCellSize(e.target.value)
+             });
+             
+             // Initial patterns
+             var initialsElem = $("#initials").get(0);
+             initialsElem.length = 0;
+             for (var key in GOF.initialPatterns) {
+                 var o = document.createElement("option");
+                 o.textContent = key;
+                 o.value = key;
+                 initialsElem.appendChild(o);
+             }
+             $("#initials").on("change", function(e) {
+                 autoIteration(0);
+                 var patternObj = GOF.initialPatterns[e.target.value];
+                 var cellSize = patternObj.gridSizeHint ? Math.floor(canvas.width / patternObj.gridSizeHint) : 8;
+                 cellSize -= getPadding(cellSize);
+                 zoomAnimation(cellSize, function() {
+                     game.setInitialPattern(patternObj);
+                     game.reset();
+                     $("#cellSize").val(cellSize);
+                 });
+             });
+             
+             $("#key_i").on("click", key_i);
+             $("#key_r").on("click", key_r);
+             $("#key_c").on("click", key_c);
+             $("#key_z").on("click", key_z);
+             $("#key_x").on("click", key_x);
+             $("#key_s").on("click", toggleAutoIteration);
+             $("#key_d").on("click", key_d);
+             $("#key_a").on("click", key_a);
+
+             // Visual theme controls
+             var visualsElem = $("#visuals").get(0);
+             visualsElem.length = 0;
+             for (var key in GOF.themes) {
+                 var o = document.createElement("option");
+                 o.textContent = key;
+                 o.value = key;
+                 var theme = GOF.themes[key];
+                 o.style.color = theme.cellColorAlive;
+                 o.style.background = theme.cellColorDead;
+                 visualsElem.appendChild(o);
+             }
+             $("#visuals").on("change", function(e) {
+                 game.setTheme(GOF.themes[e.target.value]);
+             });
+             // Speed control
+             bindRangeInputEvent("#speed", function(e) {
+                 if (isAutoIterationEnabled()) {
+                     autoIteration(e.target.value);
+                 }
+             });
+
+             // Prevent selection on clickable UI text
+             $(".clickable").on("selectstart", function(e) {
+                 e.preventDefault();
+                 return false;
+             }).css("MozUserSelect","none");
+
+         }
+
+         function keyboardHandler(e) {
+             if (e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) {
+                 return true;
+             }
+
+             var keyElemId = null;
+             switch (e.which) { // e.which is normalized by jQuery
+                 case 73:
+                     keyElemId="key_i";
+                     if (e.type == "keydown") {
+                         key_i();
+                     }  
+                     break;
+                 case 67:
+                     keyElemId="key_c";
+                     if (e.type == "keydown") {
+                         key_c();
+                     }  
+                     break;
+                 case 82:
+                     keyElemId="key_r";
+                     if (e.type == "keydown") {
+                         key_r();
+                     }  
+                     break;
+                 case 83:
+                     keyElemId="key_s";
+                     if (e.type == "keydown") {
+                         toggleAutoIteration();
+                     }
+                     break;
+                 case 65:
+                     keyElemId="key_a";
+                     if (e.type == "keydown") {
+                         key_a();
+                     }
+                     break;
+                 case 68:
+                     keyElemId="key_d";
+                     if (e.type == "keydown") {
+                         key_d();
+                     }
+                     break;
+                 case 90:
+                     keyElemId="key_z";
+                     if (e.type == "keydown") {
+                         key_z();
+                     }
+                     break;
+                 case 88:
+                     keyElemId="key_x";
+                     if (e.type == "keydown") {
+                         key_x();
+                     }
+                     break;
+                 default:
+                     return true; // Let default actions proceed
+             }
+             if (e.type == "keydown") {
+                 $("#" + keyElemId + " span.key").addClass("activeKey");
+             } else {
+                 $("#" + keyElemId + " span.key").removeClass("activeKey");
+             }
+             return false; // Handled, so prevent default actions.
+         }
+
+         function init() {
+             game = initGameCanvas();
+             initControls();
+             $(document).keydown(keyboardHandler);
+             $(document).keyup(keyboardHandler);
+             zoomAnimation(8);
+         }
+
+         $().ready(init);
+        </script>
+    </head>
+
+    <body>
+        <h1>Game of Life</h1>
+        <p>This is an HTML5 canvas experiment implementing J.H. Conway's famous "Game of
+            Life" cellular automaton game. In its pure mathematical form, the game requires
+            an infinite grid. But given the constraint of finite computing resources, this
+            would be impractical, so the universe is limited in size. This may affect
+            evolutions to not be 100% accurate mathematically, depending on the amount of
+            grid space required. It's still fun, though.
+        </p>
+
+        <div id="gameCanvasContainer">
+            <canvas id="gameCanvas" width="480" height="480"></canvas>
+        </div>
+
+        <div id="controlsContainer">
+            <table id="controls">
+                <tr>
+                    <td id="key_i" class="clickable"><span class="key">i</span>Iterate once</td>
+                    <td id="key_r" class="clickable"><span class="key">r</span>Reset</td>
+                </tr>
+                <tr>
+                    <td id="key_s" class="clickable"><span class="key">s</span><span id="startStop">Start</span></td>
+                    <td id="key_c" class="clickable"><span class="key">c</span>Clear</td>
+                </tr>
+                <tr>
+                    <td id="key_z" class="clickable"><span class="key">z</span>Zoom out</td>
+                    <td id="key_d" class="clickable"><span class="key">d</span>Speed up</td>
+                </tr>
+                <tr>
+                    <td id="key_x" class="clickable"><span class="key">x</span>Zoom in</td>
+                    <td id="key_a" class="clickable"><span class="key">a</span>Slow down</td>
+                </tr>
+                <tr>
+                    <td>Zoom</td>
+                    <td><input type="range" id="cellSize" min="2" max="40" value="8"></td>
+                </tr>
+                <tr>
+                    <td>Speed</td>
+                    <td><input type="range" id="speed" min="1" max="10" value="5"></td>
+                </tr>
+                <tr>
+                    <td>Initial pattern</td>
+                    <td><select id="initials"></select></td>
+                </tr>
+                <tr>
+                    <td>Theme</td>
+                    <td><select id="visuals"></select></td>
+                </tr>
+            </table>
+        </div>
+
+        <div id="helpContainer">
+            <p>Use the controls to start game. Keyboard shortcuts are highlighted as black
+                keys.</p>
+            <p>You can at any time create live cells by drawing on the canvas with the
+                left mouse button and kill cells using any other mouse button.</p>
+            <p>You can select starting patterns and visual themes from the dropdown menus
+                under the controls. Each initial pattern sets a suitable zoom level, but you
+                can always make the pattern redraw at a different level by using the "Reset"
+                function.</p>
+        </div>
+</body>
+</html>
