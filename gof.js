@@ -1,6 +1,8 @@
 // Game of Life in JavaScript - version 1-beta.
 // Copyright (C) 2014 Øyvind Stegard.
 
+'use strict';
+
 // TODO touch event handling (for drawing on and resizing grid)
 
 // GOF namespace object
